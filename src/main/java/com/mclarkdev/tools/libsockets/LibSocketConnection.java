@@ -7,6 +7,9 @@ import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.UnknownHostException;
 
+/**
+ * LibSockets // LibSocketConnection
+ */
 public class LibSocketConnection {
 
 	private final LibSocketListener listener;
@@ -39,6 +42,16 @@ public class LibSocketConnection {
 	}
 
 	public void shutdown() {
+		if (socket != null && !socket.isClosed()) {
+			try {
+				socket.close();
+			} catch (IOException e) {
+			}
+		}
+	}
+
+	public Socket getSocket() {
+		return socket;
 	}
 
 	public static LibSocketConnection createConnection(LibSocketListener listener, String host, int port)
@@ -47,5 +60,4 @@ public class LibSocketConnection {
 		Socket s = new Socket(host, port);
 		return new LibSocketConnection(listener, s);
 	}
-
 }

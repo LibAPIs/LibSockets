@@ -3,6 +3,9 @@ package com.mclarkdev.tools.libsockets;
 import java.io.IOException;
 import java.net.UnknownHostException;
 
+/**
+ * LibSockets // LibSocketClient
+ */
 public class LibSocketClient implements LibSocketListener {
 
 	private final String connHost;

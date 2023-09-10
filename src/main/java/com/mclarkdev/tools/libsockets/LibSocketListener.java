@@ -2,6 +2,9 @@ package com.mclarkdev.tools.libsockets;
 
 import java.io.IOException;
 
+/**
+ * LibSockets // LibSocketListener
+ */
 public interface LibSocketListener {
 
 	public void onConnect();
