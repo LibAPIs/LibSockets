@@ -3,61 +3,98 @@ package com.mclarkdev.tools.libsockets;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.net.Socket;
-import java.net.UnknownHostException;
+import java.util.UUID;
 
 /**
  * LibSockets // LibSocketConnection
  */
 public class LibSocketConnection {
 
-	private final LibSocketListener listener;
+	private final String id = UUID.randomUUID().toString();
+
+	private final LibSocketConnectionCallback callback;
 
 	private final Socket socket;
+	private final String hostAddr;
+
+	private final Thread runner;
+
 	private final BufferedReader reader;
-	private final PrintWriter writer;
 
-	private LibSocketConnection(LibSocketListener listener, Socket socket) throws IOException {
+	public LibSocketConnection(LibSocketConnectionCallback callback, Socket socket) throws IOException {
 
-		this.listener = listener;
-		this.socket = socket;
+		// Check callback
+		if (callback != null) {
+			this.callback = callback;
+		} else {
+			throw new IllegalArgumentException("callback is null");
+		}
 
+		// Check socket
+		if (socket != null) {
+			this.socket = socket;
+		} else {
+			throw new IllegalArgumentException("socket is null");
+		}
+
+		// Get host address
+		this.hostAddr = socket.getRemoteSocketAddress().toString();
+
+		// Open input stream
 		this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-		this.writer = new PrintWriter(socket.getOutputStream(), true);
 
-		new Thread() {
+		// Create listener thread
+		this.runner = new Thread() {
 			public void run() {
+
+				setName(String.format("LibSocketConnection (%s)", hostAddr));
+
 				try {
 					String line;
 					while ((line = reader.readLine()) != null) {
-						listener.onMessage(LibSocketConnection.this, line);
+						callback.onMessage(LibSocketConnection.this, line);
 					}
-				} catch (IOException e) {
-					listener.onDiconnect(e);
+				} catch (Exception | Error e) {
+					callback.onDiconnect(LibSocketConnection.this, e);
 				}
+
+				shutdown();
 			}
-		}.start();
-		this.listener.onConnect();
+		};
+
+		// Call implemented callback
+		this.callback.onConnect(LibSocketConnection.this);
+
+		// Start thread
+		this.runner.start();
 	}
 
-	public void shutdown() {
-		if (socket != null && !socket.isClosed()) {
-			try {
-				socket.close();
-			} catch (IOException e) {
-			}
-		}
+	public String getConnectionId() {
+		return id;
+	}
+
+	public LibSocketConnectionCallback getCallback() {
+		return callback;
 	}
 
 	public Socket getSocket() {
 		return socket;
 	}
 
-	public static LibSocketConnection createConnection(LibSocketListener listener, String host, int port)
-			throws UnknownHostException, IOException {
+	public void write(byte[] bytes) throws IOException {
+		this.socket.getOutputStream().write(bytes);
+		this.socket.getOutputStream().flush();
+	}
 
-		Socket s = new Socket(host, port);
-		return new LibSocketConnection(listener, s);
+	public void shutdown() {
+		if (socket.isClosed()) {
+			return;
+		}
+
+		try {
+			socket.close();
+		} catch (IOException e) {
+		}
 	}
 }
