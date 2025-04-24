@@ -20,15 +20,23 @@ public class LibSocketConnection {
 
 	private final long connected;
 
-	private final BufferedReader reader;
-
 	private double rxBytes = 0;
 	private double rxMessages = 0;
 
 	private double txBytes = 0;
 	private double txMessages = 0;
 
-	public LibSocketConnection(LibSocketConnectionCallback callback, Socket socket) throws IOException {
+	private final Thread readerThread;
+
+	/**
+	 * Creates a new LibSocketConnection object for managing low-level socket
+	 * messaging with a client.
+	 * 
+	 * @param callback the callback for socket events
+	 * @param socket   the client socket connection
+	 * @throws IOException failure establishing communication channel
+	 */
+	private LibSocketConnection(LibSocketConnectionCallback callback, Socket socket) {
 
 		// Check callback
 		if (callback != null) {
@@ -40,6 +48,7 @@ public class LibSocketConnection {
 		// Check socket
 		if (socket != null) {
 			this.socket = socket;
+
 		} else {
 			throw new IllegalArgumentException("socket is null");
 		}
@@ -50,81 +59,29 @@ public class LibSocketConnection {
 		// Time socket was connected
 		this.connected = System.currentTimeMillis();
 
-		// Open input stream
-		this.reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-		// Start thread
-		new Thread(worker).start();
+		// Create and start worker thread
+		this.readerThread = new Thread(socketReader);
+		this.readerThread.start();
 	}
 
-	public String getConnectionId() {
-		return id;
-	}
+	// Background thread for reading client stream
+	private final Runnable socketReader = new Runnable() {
 
-	public LibSocketConnectionCallback getCallback() {
-		return callback;
-	}
-
-	public Socket getSocket() {
-		return socket;
-	}
-
-	public String getAddress() {
-		return hostAddr;
-	}
-
-	public long getTimeConnected() {
-		return connected;
-	}
-
-	public double getRxBytes() {
-		return rxBytes;
-	}
-
-	public double getRxMessages() {
-		return rxMessages;
-	}
-
-	public double getTxBytes() {
-		return txBytes;
-	}
-
-	public double getTxMessages() {
-		return txMessages;
-	}
-
-	public void write(byte[] bytes) throws IOException {
-
-		// Send the data
-		this.socket.getOutputStream().write(bytes);
-		this.socket.getOutputStream().flush();
-
-		// Hit the counters
-		this.txMessages += 1;
-		this.txBytes += bytes.length;
-	}
-
-	public void shutdown() {
-		if (socket.isClosed()) {
-			return;
-		}
-
-		try {
-			socket.close();
-		} catch (IOException e) {
-		}
-	}
-
-	private final Runnable worker = new Runnable() {
 		public void run() {
 
+			// Rename the thread for debuggers
 			Thread.currentThread().setName(//
 					String.format("LibSocketConnection (%s)", hostAddr));
 
-			// Call implemented callback
-			callback.onConnect(LibSocketConnection.this);
-
 			try {
+
+				// Open input stream
+				BufferedReader reader = new BufferedReader(//
+						new InputStreamReader(socket.getInputStream()));
+
+				// Call implemented handler
+				callback.onConnect(LibSocketConnection.this);
+
 				String line;
 				while ((line = reader.readLine()) != null) {
 
@@ -136,10 +93,157 @@ public class LibSocketConnection {
 					callback.onMessage(LibSocketConnection.this, line);
 				}
 			} catch (Exception | Error e) {
-				callback.onDiconnect(LibSocketConnection.this, e);
-			}
 
-			shutdown();
+				// Call implemented handler
+				callback.onDiconnect(LibSocketConnection.this, e);
+			} finally {
+
+				// Cleanup
+				shutdown();
+			}
 		}
 	};;
+
+	/**
+	 * Get the connection ID.
+	 * 
+	 * @return connection ID
+	 */
+	public String getConnectionId() {
+		return id;
+	}
+
+	/**
+	 * Get the raw callback object.
+	 * 
+	 * @return raw callback object
+	 */
+	public LibSocketConnectionCallback getCallback() {
+		return callback;
+	}
+
+	/**
+	 * Get the raw Socket object.
+	 * 
+	 * @return raw Socket object
+	 */
+	public Socket getSocket() {
+		return socket;
+	}
+
+	/**
+	 * Get the address of the connected socket.
+	 * 
+	 * @return address of the connected socket
+	 */
+	public String getAddress() {
+		return hostAddr;
+	}
+
+	/**
+	 * Get the time at which the socket was connected.
+	 * 
+	 * @return time when the socket was connected
+	 */
+	public long getTimeConnected() {
+		return connected;
+	}
+
+	/**
+	 * Get the number of bytes received.
+	 * 
+	 * @return number of bytes received
+	 */
+	public double getRxBytes() {
+		return rxBytes;
+	}
+
+	/**
+	 * Get the number of messages received.
+	 * 
+	 * @return number of messages received
+	 */
+	public double getRxMessages() {
+		return rxMessages;
+	}
+
+	/**
+	 * Get the number of bytes sent.
+	 * 
+	 * @return number of bytes sent
+	 */
+	public double getTxBytes() {
+		return txBytes;
+	}
+
+	/**
+	 * Get the number of messages sent.
+	 * 
+	 * @return number of messages sent
+	 */
+	public double getTxMessages() {
+		return txMessages;
+	}
+
+	/**
+	 * Check if the connection is alive and connected.
+	 * 
+	 * @return connection is alive
+	 */
+	public boolean alive() {
+		boolean isAlive = true;
+
+		isAlive = isAlive && this.readerThread.isAlive();
+		isAlive = isAlive && this.socket.isConnected();
+		isAlive = isAlive && !this.socket.isClosed();
+
+		return isAlive;
+	}
+
+	/**
+	 * Write a raw message to the connected client.
+	 * 
+	 * @param bytes raw bytes to send
+	 * @throws IOException failure sending message
+	 */
+	public void write(byte[] bytes) throws IOException {
+
+		// Send the data
+		socket.getOutputStream().write(bytes);
+		socket.getOutputStream().flush();
+
+		// Hit the counters
+		txMessages += 1;
+		txBytes += bytes.length;
+	}
+
+	/**
+	 * Shutdown the socket connection.
+	 */
+	public void shutdown() {
+
+		try {
+			// Try to close socket
+			if (!socket.isClosed()) {
+				socket.close();
+			}
+		} catch (IOException e) {
+		}
+
+		// Try to shutdown reader thread
+		if (this.readerThread.isAlive()) {
+			this.readerThread.interrupt();
+		}
+	}
+
+	/**
+	 * Spawn a new LibSocketConnection object.
+	 * 
+	 * @param callback the callback for socket events
+	 * @param socket   the client socket connection
+	 * @return the newly spawned connection object
+	 */
+	public static LibSocketConnection spawn(LibSocketConnectionCallback callback, Socket socket) {
+		return (new LibSocketConnection(callback, socket));
+	}
 }

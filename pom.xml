@@ -1,4 +1,6 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
 	<organization>
@@ -8,12 +10,13 @@
 
 	<groupId>com.mclarkdev.tools</groupId>
 	<artifactId>libsockets</artifactId>
-	<version>1.5.3</version>
+	<version>1.6.0</version>
 	<packaging>jar</packaging>
 
 	<name>libsockets</name>
 	<url>https://git.mclarkdev.com/LibAPIs/LibSockets.git</url>
-	<description>A simple java helper library for managing a server socket and her connections.</description>
+	<description>A simple java helper library for managing a server socket and
+		her connections.</description>
 
 	<licenses>
 		<license>
@@ -99,4 +102,13 @@
 			</plugin>
 		</plugins>
 	</build>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.json</groupId>
+			<artifactId>json</artifactId>
+			<version>20230618</version>
+			<scope>compile</scope>
+		</dependency>
+	</dependencies>
 </project>
