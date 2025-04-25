@@ -3,6 +3,7 @@ package com.mclarkdev.tools.libsockets;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.util.UUID;
 
@@ -210,13 +211,20 @@ public class LibSocketConnection {
 	 */
 	public void write(byte[] bytes) throws IOException {
 
-		// Send the data
-		socket.getOutputStream().write(bytes);
-		socket.getOutputStream().flush();
+		// Grab socket output stream
+		OutputStream out = //
+				socket.getOutputStream();
+
+		// Sync and send the data
+		synchronized (out) {
+			out.write(bytes);
+			out.write('\n');
+			out.flush();
+		}
 
 		// Hit the counters
 		txMessages += 1;
-		txBytes += bytes.length;
+		txBytes += (bytes.length + 1);
 	}
 
 	/**

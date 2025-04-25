@@ -21,7 +21,6 @@ public class LibSocketWireTask {
 	 * 
 	 * @param name     the name of the task
 	 * @param runnable the runnable to execute
-	 * @param timeout  the timeout for the task
 	 */
 	public LibSocketWireTask(String name, LibSocketRunnable runnable) {
 
