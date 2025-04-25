@@ -5,6 +5,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -41,8 +42,9 @@ public class LibSocketAsyncMessageController {
 	/**
 	 * Creates a new AsyncMessageController.
 	 * 
-	 * @param port    peer to peer message bind port
-	 * @param workers number of worker threads to create
+	 * @param port     peer to peer message bind port
+	 * @param workers  number of worker threads to create
+	 * @param callback socket callback for user implemented logic
 	 * @throws IOException failure binding to socket
 	 */
 	public LibSocketAsyncMessageController(int port, int workers, //
@@ -71,22 +73,6 @@ public class LibSocketAsyncMessageController {
 		// Start server thread
 		this.serverThread = new Thread(socketAcceptor);
 		this.serverThread.start();
-	}
-
-	/**
-	 * Request a graceful shutdown of the controller.
-	 */
-	public void shutdown() {
-
-		// Interrupt the main listener thread
-		this.serverThread.interrupt();
-
-		// Loop all connected clients
-		for (Map.Entry<String, LibSocketConnection> entry : clients.entrySet()) {
-
-			// Disconnect the client
-			entry.getValue().shutdown();
-		}
 	}
 
 	// Background thread for accepting client connections
@@ -135,7 +121,11 @@ public class LibSocketAsyncMessageController {
 			clients.put(connection.getConnectionId(), connection);
 
 			// Call parent handler
-			parentHandler.onConnect(connection);
+			workerPool.submit(new Runnable() {
+				public void run() {
+					parentHandler.onConnect(connection);
+				}
+			});
 		}
 
 		@Override
@@ -161,7 +151,11 @@ public class LibSocketAsyncMessageController {
 			}
 
 			// Call parent handler if unsolicited message
-			parentHandler.onMessage(connection, message);
+			workerPool.submit(new Runnable() {
+				public void run() {
+					parentHandler.onMessage(connection, message);
+				}
+			});
 		}
 
 		@Override
@@ -171,9 +165,23 @@ public class LibSocketAsyncMessageController {
 			clients.remove(connection.getConnectionId());
 
 			// Call parent handler
-			parentHandler.onDiconnect(connection, e);
+			workerPool.submit(new Runnable() {
+				public void run() {
+					parentHandler.onDiconnect(connection, e);
+				}
+			});
 		}
 	};
+
+	/**
+	 * Get a list of all connected clients.
+	 * 
+	 * @return list of all connected clients
+	 */
+	public Collection<LibSocketConnection> clients() {
+
+		return clients.values();
+	}
 
 	/**
 	 * Write a message to a client.
@@ -184,7 +192,7 @@ public class LibSocketAsyncMessageController {
 	 * @param message the body of the message to write
 	 * @return the tracking ID of the message
 	 */
-	public String write(final String client, String message) {
+	public String tx(final String client, String message) {
 
 		// Get requested client connection
 		LibSocketConnection connection = clients.get(client);
@@ -214,7 +222,7 @@ public class LibSocketAsyncMessageController {
 						} catch (IOException e) {
 						}
 					}
-				}, 3000);
+				});
 
 		// Submit the task to the thread pool
 		wireTask.submit(workerPool);
@@ -235,7 +243,7 @@ public class LibSocketAsyncMessageController {
 	 * @param timeout timeout to wait for a response
 	 * @return the message body returned
 	 */
-	public String read(String uid, long timeout) {
+	public String rx(String uid, long timeout) {
 
 		// Calculate timeout time
 		long timeTimeout = (System.currentTimeMillis() + timeout);
@@ -255,7 +263,6 @@ public class LibSocketAsyncMessageController {
 		}
 
 		// Add to abandoned map
-		inFlight.remove(uid);
 		abandoned.add(uid);
 		return null;
 	}
@@ -272,6 +279,22 @@ public class LibSocketAsyncMessageController {
 	 */
 	public String txrx(String client, String body, long timeout) {
 
-		return read(write(client, body), timeout);
+		return rx(tx(client, body), timeout);
+	}
+
+	/**
+	 * Request a graceful shutdown of the controller.
+	 */
+	public void shutdown() {
+
+		// Interrupt the main listener thread
+		this.serverThread.interrupt();
+
+		// Loop all connected clients
+		for (Map.Entry<String, LibSocketConnection> entry : clients.entrySet()) {
+
+			// Disconnect the client
+			entry.getValue().shutdown();
+		}
 	}
 }

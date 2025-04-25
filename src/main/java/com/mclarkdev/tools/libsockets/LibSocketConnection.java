@@ -6,6 +6,8 @@ import java.io.InputStreamReader;
 import java.net.Socket;
 import java.util.UUID;
 
+import org.json.JSONObject;
+
 /**
  * LibSockets // LibSocketConnection
  */
@@ -190,7 +192,7 @@ public class LibSocketConnection {
 	 * 
 	 * @return connection is alive
 	 */
-	public boolean alive() {
+	public boolean isAlive() {
 		boolean isAlive = true;
 
 		isAlive = isAlive && this.readerThread.isAlive();
@@ -234,6 +236,31 @@ public class LibSocketConnection {
 		if (this.readerThread.isAlive()) {
 			this.readerThread.interrupt();
 		}
+	}
+
+	/**
+	 * Get the connection details as a JSON object.
+	 * 
+	 * @return connection details
+	 */
+	public JSONObject toJSON() {
+		return new JSONObject()//
+				.put("id", getConnectionId())//
+				.put("host", getAddress())//
+				.put("alive", isAlive())//
+				.put("connected", getTimeConnected())//
+				.put("bytesTX", getTxBytes())//
+				.put("bytesRX", getRxBytes())//
+				.put("messagesTX", getTxMessages())//
+				.put("messagesRX", getRxMessages());
+	}
+
+	/**
+	 * Get the connection details as a String (JSON Format)
+	 */
+	@Override
+	public String toString() {
+		return toJSON().toString();
 	}
 
 	/**
