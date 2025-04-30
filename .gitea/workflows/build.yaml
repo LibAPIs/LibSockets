@@ -11,17 +11,17 @@ jobs:
   Build-Artifacts:
     runs-on: linux-amd64
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: "adopt"
           java-version: "11"
           cache: "maven"
-
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
 
       - name: Build artifacts with Maven
         run: mvn clean install -Dgpg.passphrase="${{ secrets.GPG_PASS }}" -Dsign=true
