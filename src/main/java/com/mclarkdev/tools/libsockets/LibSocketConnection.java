@@ -9,6 +9,8 @@ import java.util.UUID;
 
 import org.json.JSONObject;
 
+import com.mclarkdev.tools.libsockets.lib.LibSocketConnectionCallback;
+
 /**
  * LibSockets // LibSocketConnection
  */
@@ -37,9 +39,8 @@ public class LibSocketConnection {
 	 * 
 	 * @param callback the callback for socket events
 	 * @param socket   the client socket connection
-	 * @throws IOException failure establishing communication channel
 	 */
-	private LibSocketConnection(LibSocketConnectionCallback callback, Socket socket) {
+	public LibSocketConnection(Socket socket, LibSocketConnectionCallback callback) {
 
 		// Check callback
 		if (callback != null) {
@@ -269,16 +270,5 @@ public class LibSocketConnection {
 	@Override
 	public String toString() {
 		return toJSON().toString();
-	}
-
-	/**
-	 * Spawn a new LibSocketConnection object.
-	 * 
-	 * @param callback the callback for socket events
-	 * @param socket   the client socket connection
-	 * @return the newly spawned connection object
-	 */
-	public static LibSocketConnection spawn(LibSocketConnectionCallback callback, Socket socket) {
-		return (new LibSocketConnection(callback, socket));
 	}
 }

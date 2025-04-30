@@ -1,4 +1,6 @@
-package com.mclarkdev.tools.libsockets;
+package com.mclarkdev.tools.libsockets.lib;
+
+import com.mclarkdev.tools.libsockets.LibSocketConnection;
 
 /**
  * LibSockets // LibSocketListener

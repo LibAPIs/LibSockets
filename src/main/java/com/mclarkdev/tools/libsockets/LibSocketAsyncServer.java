@@ -12,17 +12,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import org.json.JSONObject;
 
-/**
- * LibSockets // LibSocketAsyncMessageController
- */
-public class LibSocketAsyncMessageController {
+import com.mclarkdev.tools.libsockets.lib.LibSocketConnectionCallback;
 
-	private final ExecutorService workerPool;
+/**
+ * LibSockets // LibSocketAsyncServer
+ */
+public class LibSocketAsyncServer {
 
 	private final HashMap<String, LibSocketConnection> clients;
 
@@ -43,15 +41,11 @@ public class LibSocketAsyncMessageController {
 	 * Creates a new AsyncMessageController.
 	 * 
 	 * @param port     peer to peer message bind port
-	 * @param workers  number of worker threads to create
 	 * @param callback socket callback for user implemented logic
 	 * @throws IOException failure binding to socket
 	 */
-	public LibSocketAsyncMessageController(int port, int workers, //
+	public LibSocketAsyncServer(int port, //
 			LibSocketConnectionCallback callback) throws IOException {
-
-		// Create the thread pool of workers
-		this.workerPool = Executors.newFixedThreadPool(workers);
 
 		// Map of connected clients
 		this.clients = new HashMap<>();
@@ -97,7 +91,7 @@ public class LibSocketAsyncMessageController {
 					}
 
 					// Spawn the new client connection
-					LibSocketConnection.spawn(socketCallback, clientSocket);
+					new LibSocketAsyncConnection(clientSocket, socketCallback);
 
 				} catch (SocketTimeoutException e) {
 
@@ -121,11 +115,7 @@ public class LibSocketAsyncMessageController {
 			clients.put(connection.getConnectionId(), connection);
 
 			// Call parent handler
-			workerPool.submit(new Runnable() {
-				public void run() {
-					parentHandler.onConnect(connection);
-				}
-			});
+			parentHandler.onConnect(connection);
 		}
 
 		@Override
@@ -150,12 +140,8 @@ public class LibSocketAsyncMessageController {
 				return;
 			}
 
-			// Call parent handler if unsolicited message
-			workerPool.submit(new Runnable() {
-				public void run() {
-					parentHandler.onMessage(connection, message);
-				}
-			});
+			// Call parent handler
+			parentHandler.onMessage(connection, message);
 		}
 
 		@Override
@@ -165,11 +151,7 @@ public class LibSocketAsyncMessageController {
 			clients.remove(connection.getConnectionId());
 
 			// Call parent handler
-			workerPool.submit(new Runnable() {
-				public void run() {
-					parentHandler.onDiconnect(connection, e);
-				}
-			});
+			parentHandler.onDiconnect(connection, e);
 		}
 	};
 
@@ -181,6 +163,17 @@ public class LibSocketAsyncMessageController {
 	public Collection<LibSocketConnection> clients() {
 
 		return clients.values();
+	}
+
+	/**
+	 * Get a client connection by ID.
+	 * 
+	 * @param id the connection ID
+	 * @return the client connection
+	 */
+	public LibSocketConnection client(String id) {
+
+		return clients.get(id);
 	}
 
 	/**
@@ -211,22 +204,15 @@ public class LibSocketAsyncMessageController {
 				.put("body", message);
 
 		// Create a new wire task to send the message
-		LibSocketWireTask wireTask = new LibSocketWireTask("AsyncTX", //
-				new LibSocketRunnable(wrappedMessage) {
+		byte[] bytes = wrappedMessage.toString().getBytes();
 
-					@Override
-					public void run(byte[] bytes) {
-
-						try {
-							connection.write(bytes);
-						} catch (IOException e) {
-						}
-					}
-				});
-
-		// Submit the task to the thread pool
-		wireTask.submit(workerPool);
-		inFlight.add(messageID);
+		try {
+			// Write to socket
+			connection.write(bytes);
+		} catch (IOException e) {
+			System.out.println("Network error.");
+			e.printStackTrace(System.err);
+		}
 
 		// Return the tracking ID
 		return messageID;

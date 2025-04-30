@@ -1,4 +1,4 @@
-package com.mclarkdev.tools.libsockets;
+package com.mclarkdev.tools.libsockets.lib;
 
 import org.json.JSONObject;
 
