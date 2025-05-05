@@ -2,7 +2,6 @@ package com.mclarkdev.tools.libsockets;
 
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -11,7 +10,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import org.json.JSONObject;
 
@@ -21,6 +19,8 @@ import com.mclarkdev.tools.libsockets.lib.LibSocketConnectionCallback;
  * LibSockets // LibSocketAsyncServer
  */
 public class LibSocketAsyncServer {
+
+	private volatile long sequence = 0;
 
 	private final HashMap<String, LibSocketConnection> clients;
 
@@ -69,29 +69,39 @@ public class LibSocketAsyncServer {
 		this.serverThread.start();
 	}
 
+	/**
+	 * Returns the number of currently in flight requests.
+	 * 
+	 * @return number of currently in flight requests
+	 */
+	public int countInFlight() {
+		return inFlight.size();
+	}
+
+	/**
+	 * Returns the number of abandoned requests.
+	 * 
+	 * @return number of abandoned requests
+	 */
+	public int countAbandoned() {
+		return abandoned.size();
+	}
+
 	// Background thread for accepting client connections
 	private Runnable socketAcceptor = new Runnable() {
 		public void run() {
 
 			// Rename the thread for debuggers
 			Thread.currentThread().setName(//
-					String.format("LibSocketAsyncServer (%d)", bindPort));
+					String.format("LibSocketAsyncServer (:%d)", bindPort));
 
-			Socket clientSocket;
 			while (!Thread.currentThread().isInterrupted()) {
 
 				try {
 
-					// Accept new client connection
-					clientSocket = serverSocket.accept();
-
-					// Check valid socket
-					if (clientSocket == null) {
-						continue;
-					}
-
-					// Spawn the new client connection
-					new LibSocketAsyncConnection(clientSocket, socketCallback);
+					// Accept and spawn the new client connections
+					new LibSocketAsyncConnection(//
+							serverSocket.accept(), socketCallback);
 
 				} catch (SocketTimeoutException e) {
 
@@ -112,7 +122,9 @@ public class LibSocketAsyncServer {
 		public void onConnect(LibSocketConnection connection) {
 
 			// Add to list of connected clients
-			clients.put(connection.getConnectionId(), connection);
+			synchronized (clients) {
+				clients.put(connection.getConnectionId(), connection);
+			}
 
 			// Call parent handler
 			parentHandler.onConnect(connection);
@@ -121,22 +133,29 @@ public class LibSocketAsyncServer {
 		@Override
 		public void onMessage(LibSocketConnection connection, String message) {
 			JSONObject wrapped = new JSONObject(message);
-			String id = wrapped.getString("id");
-			String body = wrapped.getString("body");
+
+			boolean isReply = wrapped.has("ack");
+
+			String id = (isReply) ? //
+					wrapped.getString("ack") : wrapped.getString("id");
+
+			boolean isInFlight = inFlight.contains(id);
+			boolean isAbandoned = isReply && !isInFlight;
+
+			// Drop abandoned message
+			if (isAbandoned) {
+				return;
+			}
 
 			// Check if response to inFlight request
-			if (inFlight.contains(id)) {
+			if (isInFlight) {
 
 				// Remove from inFlight map
 				inFlight.remove(id);
 
-				// Check if abandoned
-				if (abandoned.contains(id)) {
-					return;
-				}
-
 				// Add to responses map
-				responses.put(id, body);
+				responses.put(id, //
+						wrapped.getString("body"));
 				return;
 			}
 
@@ -145,13 +164,20 @@ public class LibSocketAsyncServer {
 		}
 
 		@Override
-		public void onDiconnect(LibSocketConnection connection, Throwable e) {
+		public void onDisconnect(LibSocketConnection connection, Throwable e) {
 
-			// Remove from list of connected clients
-			clients.remove(connection.getConnectionId());
+			synchronized (clients) {
+
+				// Check if client is still connected
+				if (clients.containsKey(connection.getConnectionId())) {
+
+					// Remove from list of connected clients
+					clients.remove(connection.getConnectionId());
+				}
+			}
 
 			// Call parent handler
-			parentHandler.onDiconnect(connection, e);
+			parentHandler.onDisconnect(connection, e);
 		}
 	};
 
@@ -196,7 +222,7 @@ public class LibSocketAsyncServer {
 		}
 
 		// Generate tracking ID for the message
-		String messageID = UUID.randomUUID().toString();
+		String messageID = String.format("sq-%012d;", (sequence++));
 
 		// Wrap the message in a JSON object
 		JSONObject wrappedMessage = new JSONObject()//
@@ -207,11 +233,16 @@ public class LibSocketAsyncServer {
 		byte[] bytes = wrappedMessage.toString().getBytes();
 
 		try {
+
 			// Write to socket
 			connection.write(bytes);
+			inFlight.add(messageID);
 		} catch (IOException e) {
+
 			System.out.println("Network error.");
 			e.printStackTrace(System.err);
+			connection.shutdown();
+			return null;
 		}
 
 		// Return the tracking ID
@@ -228,8 +259,14 @@ public class LibSocketAsyncServer {
 	 * @param uid     the tracking ID of the message
 	 * @param timeout timeout to wait for a response
 	 * @return the message body returned
+	 * @throws InterruptedException
 	 */
-	public String rx(String uid, long timeout) {
+	public String rx(String uid, long timeout) throws InterruptedException {
+
+		// Skip if not in-flight
+		if (!inFlight.contains(uid)) {
+			return null;
+		}
 
 		// Calculate timeout time
 		long timeTimeout = (System.currentTimeMillis() + timeout);
@@ -237,19 +274,19 @@ public class LibSocketAsyncServer {
 		// Continue while not timed out
 		while (timeTimeout > System.currentTimeMillis()) {
 
-			// Skip if still in-flight
-			if (inFlight.contains(uid)) {
-				continue;
-			}
-
 			// Return if in responses map
 			if (responses.containsKey(uid)) {
-				return responses.get(uid);
+				return responses.remove(uid);
 			}
+
+			// Delay and loop
+			Thread.yield();
 		}
 
 		// Add to abandoned map
 		abandoned.add(uid);
+		inFlight.remove(uid);
+		System.err.println("Abandoned message: " + uid);
 		return null;
 	}
 
@@ -262,8 +299,9 @@ public class LibSocketAsyncServer {
 	 * @param body    the body of the message to write
 	 * @param timeout timeout to wait for a response
 	 * @return the message body returned
+	 * @throws InterruptedException interrupted
 	 */
-	public String txrx(String client, String body, long timeout) {
+	public String txrx(String client, String body, long timeout) throws InterruptedException {
 
 		return rx(tx(client, body), timeout);
 	}

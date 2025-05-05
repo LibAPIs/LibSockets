@@ -10,7 +10,7 @@
 
 	<groupId>com.mclarkdev.tools</groupId>
 	<artifactId>libsockets</artifactId>
-	<version>1.6.1-SNAPSHOT</version>
+	<version>1.6.1</version>
 	<packaging>jar</packaging>
 
 	<name>libsockets</name>
@@ -49,6 +49,10 @@
 			<id>gitea</id>
 			<url>https://git.mclarkdev.com/api/packages/LibAPIs/maven</url>
 		</repository>
+		<snapshotRepository>
+			<id>gitea</id>
+			<url>https://gitea.example.com/api/packages/LibAPIs/maven</url>
+		</snapshotRepository>
 	</distributionManagement>
 
 	<properties>

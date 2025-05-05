@@ -25,11 +25,11 @@ public class LibSocketConnection {
 
 	private final long connected;
 
-	private double rxBytes = 0;
-	private double rxMessages = 0;
+	private volatile double rxBytes = 0;
+	private volatile double rxMessages = 0;
 
-	private double txBytes = 0;
-	private double txMessages = 0;
+	private volatile double txBytes = 0;
+	private volatile double txMessages = 0;
 
 	private final Thread readerThread;
 
@@ -99,7 +99,7 @@ public class LibSocketConnection {
 			} catch (Exception | Error e) {
 
 				// Call implemented handler
-				callback.onDiconnect(LibSocketConnection.this, e);
+				callback.onDisconnect(LibSocketConnection.this, e);
 			} finally {
 
 				// Cleanup

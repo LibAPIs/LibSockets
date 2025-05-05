@@ -28,5 +28,5 @@ public interface LibSocketConnectionCallback {
 	 * @param connection the client connection object
 	 * @param e          the error associated with the disconnect
 	 */
-	public void onDiconnect(LibSocketConnection connection, Throwable e);
+	public void onDisconnect(LibSocketConnection connection, Throwable e);
 }
