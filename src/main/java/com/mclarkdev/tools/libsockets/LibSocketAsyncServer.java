@@ -24,10 +24,10 @@ public class LibSocketAsyncServer {
 
 	private final HashMap<String, LibSocketConnection> clients;
 
-	private final Set<String> inFlight;
-	private final List<String> abandoned;
+	private final Set<Long> inFlight;
+	private final List<Long> abandoned;
 
-	private final Map<String, String> responses;
+	private final Map<Long, String> responses;
 
 	private final int bindPort;
 
@@ -136,10 +136,10 @@ public class LibSocketAsyncServer {
 
 			boolean isReply = wrapped.has("ack");
 
-			String id = (isReply) ? //
-					wrapped.getString("ack") : wrapped.getString("id");
+			long messageSeq = (isReply) ? //
+					wrapped.getLong("ack") : wrapped.getLong("seq");
 
-			boolean isInFlight = inFlight.contains(id);
+			boolean isInFlight = inFlight.contains(messageSeq);
 			boolean isAbandoned = isReply && !isInFlight;
 
 			// Drop abandoned message
@@ -151,10 +151,10 @@ public class LibSocketAsyncServer {
 			if (isInFlight) {
 
 				// Remove from inFlight map
-				inFlight.remove(id);
+				inFlight.remove(messageSeq);
 
 				// Add to responses map
-				responses.put(id, //
+				responses.put(messageSeq, //
 						wrapped.getString("body"));
 				return;
 			}
@@ -211,7 +211,7 @@ public class LibSocketAsyncServer {
 	 * @param message the body of the message to write
 	 * @return the tracking ID of the message
 	 */
-	public String tx(final String client, String message) {
+	public long tx(final String client, String message) {
 
 		// Get requested client connection
 		LibSocketConnection connection = clients.get(client);
@@ -222,11 +222,11 @@ public class LibSocketAsyncServer {
 		}
 
 		// Generate tracking ID for the message
-		String messageID = String.format("sq-%012d;", (sequence++));
+		long messageSeq = (sequence++);
 
 		// Wrap the message in a JSON object
 		JSONObject wrappedMessage = new JSONObject()//
-				.put("id", messageID)//
+				.put("seq", messageSeq)//
 				.put("body", message);
 
 		// Create a new wire task to send the message
@@ -236,17 +236,17 @@ public class LibSocketAsyncServer {
 
 			// Write to socket
 			connection.write(bytes);
-			inFlight.add(messageID);
+			inFlight.add(messageSeq);
 		} catch (IOException e) {
 
 			System.out.println("Network error.");
 			e.printStackTrace(System.err);
 			connection.shutdown();
-			return null;
+			return 0;
 		}
 
 		// Return the tracking ID
-		return messageID;
+		return messageSeq;
 	}
 
 	/**
@@ -256,15 +256,15 @@ public class LibSocketAsyncServer {
 	 * 
 	 * Responses received at a later time will be dropped.
 	 * 
-	 * @param uid     the tracking ID of the message
+	 * @param seq     the tracking ID of the message
 	 * @param timeout timeout to wait for a response
 	 * @return the message body returned
 	 * @throws InterruptedException
 	 */
-	public String rx(String uid, long timeout) throws InterruptedException {
+	public String rx(long seq, long timeout) throws InterruptedException {
 
 		// Skip if not in-flight
-		if (!inFlight.contains(uid)) {
+		if (!inFlight.contains(seq)) {
 			return null;
 		}
 
@@ -275,8 +275,8 @@ public class LibSocketAsyncServer {
 		while (timeTimeout > System.currentTimeMillis()) {
 
 			// Return if in responses map
-			if (responses.containsKey(uid)) {
-				return responses.remove(uid);
+			if (responses.containsKey(seq)) {
+				return responses.remove(seq);
 			}
 
 			// Delay and loop
@@ -284,9 +284,9 @@ public class LibSocketAsyncServer {
 		}
 
 		// Add to abandoned map
-		abandoned.add(uid);
-		inFlight.remove(uid);
-		System.err.println("Abandoned message: " + uid);
+		abandoned.add(seq);
+		inFlight.remove(seq);
+		System.err.println("Abandoned message: " + seq);
 		return null;
 	}
 
